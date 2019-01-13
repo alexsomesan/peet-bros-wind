@@ -28,11 +28,18 @@
 #define VERSION PSTR("Wind v3 18-Sep-2015")
 
 #include <PString.h>
+#include <ESP8266WiFi.h>
+#include <WiFiUdp.h>
+#include "IPAddress.h"
 
 #define windSpeedPin 4
 #define windDirPin 5
-// #define windSpeedINT 4 // INT0
-// #define windDirINT 5   // INT1
+
+#define WIFI_SSID     "LaBiserica"
+#define WIFI_PASSWORD "Macanache"
+
+const char* ssid = "xxxxxx";
+const char* password = "xxxxxx";
 
 int LED = 2;
 
@@ -67,7 +74,13 @@ volatile int knotsOut = 0;    // Wind speed output in knots * 100
 volatile int dirOut = 0;      // Direction output in degrees
 volatile boolean ignoreNextReading = false;
 
+uint16_t NMEAport = 4200;
+
 boolean debug = false;
+
+WiFiUDP Udp;
+IPAddress broadcastAddress = IPAddress(10,1,1,255);
+byte packetBuffer[UDP_TX_PACKET_MAX_SIZE];
 
 void setup()
 {
@@ -78,6 +91,21 @@ void setup()
     Serial.print("Direction Filter: ");
     Serial.println(filterGain);
 
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    Serial.print("Connecting");
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println();
+
+    Serial.print("Connected, IP address: ");
+    Serial.println(WiFi.localIP());
+    WiFi.printDiag(Serial);
+    
     pinMode(windSpeedPin, INPUT);
     pinMode(windDirPin, INPUT);
 
@@ -313,7 +341,10 @@ void printWindNmea()
     //bug - arduino prints 0x007 as 7, 0x02B as 2B, so we add it now
     if (cs < 0x10) str.print('0');
     str.print(cs, HEX); // Assemble the final message and send it out the serial port
-    Serial.println(windSentence);
+    // Serial.println(windSentence);
+    Udp.beginPacketMulticast(broadcastAddress, NMEAport, WiFi.localIP());
+    Udp.write(windSentence, str.length());
+    Udp.endPacket();
 }
 
 
