@@ -25,17 +25,16 @@
   SOFTWARE.
 */
 
-#define VERSION "Wind v3 18-Sep-2015"
+#define VERSION PSTR("Wind v3 18-Sep-2015")
 
-#include "PString.h"
+#include <PString.h>
 
-#define windSpeedPin 2
-#define windDirPin 3
-#define windSpeedINT 0 // INT0
-#define windDirINT 1   // INT1
+#define windSpeedPin 4
+#define windDirPin 5
+// #define windSpeedINT 4 // INT0
+// #define windDirINT 5   // INT1
 
-// Pin 13 has an LED connected on most Arduino boards.
-int LED = 13;
+int LED = 2;
 
 const unsigned long DEBOUNCE = 10000ul;      // Minimum switch time in microseconds
 const unsigned long DIRECTION_OFFSET = 0ul;  // Manual direction offset in degrees, if required
@@ -74,16 +73,16 @@ void setup()
 {
     pinMode(LED, OUTPUT);
 
-    Serial.begin(38400, SERIAL_8N1);
+    Serial.begin(74880, SERIAL_8N1);
     Serial.println(VERSION);
     Serial.print("Direction Filter: ");
     Serial.println(filterGain);
 
     pinMode(windSpeedPin, INPUT);
-    attachInterrupt(windSpeedINT, readWindSpeed, FALLING);
-
     pinMode(windDirPin, INPUT);
-    attachInterrupt(windDirINT, readWindDir, FALLING);
+
+    attachInterrupt(digitalPinToInterrupt(windSpeedPin), readWindSpeed, FALLING);
+    attachInterrupt(digitalPinToInterrupt(windDirPin), readWindDir, FALLING);
 
     interrupts();
 }
