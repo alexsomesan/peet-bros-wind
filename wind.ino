@@ -1,3 +1,5 @@
+#include <PString.h>
+
 /*
   Wind - NMEA Wind Instrument
   Copyright (c) 2018 Tom K
@@ -28,20 +30,17 @@
 #define VERSION PSTR("Wind v3 18-Sep-2015")
 
 #include <PString.h>
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <WiFiUdp.h>
 #include "IPAddress.h"
 
-#define windSpeedPin 4
-#define windDirPin 5
+#define windSpeedPin 34
+#define windDirPin 35
 
-#define WIFI_SSID "LaBiserica"
-#define WIFI_PASSWORD "Macanache"
+const char *ssid = "LaBiserica";
+const char *password = "Macanache";
 
-const char *ssid = "xxxxxx";
-const char *password = "xxxxxx";
-
-int LED = 2;
+char windSentence[32];
 
 const unsigned long DEBOUNCE = 10000ul;     // Minimum switch time in microseconds
 const unsigned long DIRECTION_OFFSET = 0ul; // Manual direction offset in degrees, if required
@@ -74,47 +73,105 @@ volatile int knotsOut = 0; // Wind speed output in knots * 100
 volatile int dirOut = 0;   // Direction output in degrees
 volatile boolean ignoreNextReading = false;
 
+//Are we currently connected?
+boolean connected = false;
+
 uint16_t NMEAport = 4200;
 
 boolean debug = false;
 
-WiFiUDP Udp;
-IPAddress broadcastAddress = IPAddress(10, 1, 1, 255);
-byte packetBuffer[UDP_TX_PACKET_MAX_SIZE];
+WiFiUDP udpSender;
+IPAddress destinationAddress;
 
 void setup()
 {
-    pinMode(LED, OUTPUT);
+    pinMode(LED_BUILTIN, OUTPUT);
+    pinMode(windSpeedPin, INPUT);
+    pinMode(windDirPin, INPUT);
 
-    Serial.begin(74880, SERIAL_8N1);
-    Serial.println(VERSION);
-    Serial.print("Direction Filter: ");
-    Serial.println(filterGain);
+    attachInterrupt(windSpeedPin, readWindSpeed, FALLING);
+    attachInterrupt(windDirPin, readWindDir, FALLING);
 
+    Serial.begin(115200, SERIAL_8N1);
+    if(Serial.availableForWrite()) {
+        Serial.println(VERSION);
+        Serial.print("Direction Filter: ");
+        Serial.println(filterGain);
+    }
+    
+    // delete old config
+    WiFi.disconnect(true);
+    
     WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    //register event handler
+    WiFi.onEvent(WiFiEvent);
+    
+    //Initiate connection
+    WiFi.begin(ssid, password);
 
-    Serial.print("Connecting");
+    Serial.print("Waiting for WIFI connection...");
+
     while (WiFi.status() != WL_CONNECTED)
     {
         delay(500);
         Serial.print(".");
     }
     Serial.println();
-
-    Serial.print("Connected, IP address: ");
-    Serial.println(WiFi.localIP());
-    WiFi.printDiag(Serial);
-
-    pinMode(windSpeedPin, INPUT);
-    pinMode(windDirPin, INPUT);
-
-    attachInterrupt(digitalPinToInterrupt(windSpeedPin), readWindSpeed, FALLING);
-    attachInterrupt(digitalPinToInterrupt(windDirPin), readWindDir, FALLING);
-
     interrupts();
 }
 
+void loop()
+{
+    int i;
+    const unsigned int LOOP_DELAY = 50;
+    const unsigned int LOOP_TIME = TIMEOUT / LOOP_DELAY;
+
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN)); // Toggle LED
+
+    i = 0;
+    // If there is new data, process it, otherwise wait for LOOP_TIME to pass
+    while ((newData != true) && (i < LOOP_TIME))
+    {
+        i++;
+        delayMicroseconds(LOOP_DELAY);
+    }
+
+    calcWindSpeedAndDir(); // Process new data
+    newData = false;
+}
+
+//wifi event handler
+void WiFiEvent(WiFiEvent_t event){
+    IPAddress myIp;
+    switch(event) {
+      case SYSTEM_EVENT_STA_GOT_IP:
+        //When connected set 
+        myIp = WiFi.localIP();
+        if(Serial.availableForWrite()) {
+            Serial.println(String("WiFi connected! IP address: ") + myIp.toString());
+        }
+        //initializes the UDP state
+        destinationAddress = myIp;
+        destinationAddress[3] = 0xFF;
+        if(Serial.availableForWrite()) {
+            Serial.println(String("Destination IP address: ") + destinationAddress.toString());
+            if (! udpSender.begin(WiFi.localIP(), NMEAport) ) {
+                Serial.println("Failed UDP setup");
+            }
+        }
+        connected = true;
+        break;
+      case SYSTEM_EVENT_STA_DISCONNECTED:
+        if(Serial.availableForWrite()) {
+            Serial.println("WiFi lost connection");
+        }
+        connected = false;
+        break;
+    }
+}
+
+// Application code
+//
 void readWindSpeed()
 {
     // Despite the interrupt being set to FALLING edge, double check the pin is now LOW
@@ -331,9 +388,9 @@ byte getChecksum(char *str)
  * 6. Checksum
  *
  */
+
 void printWindNmea()
 {
-    char windSentence[30];
     float spd = knotsOut / 100.0;
     byte cs;
     //Assemble a sentence of the various parts so that we can calculate the proper checksum
@@ -350,29 +407,16 @@ void printWindNmea()
     //bug - arduino prints 0x007 as 7, 0x02B as 2B, so we add it now
     if (cs < 0x10)
         str.print('0');
-    str.print(cs, HEX); // Assemble the final message and send it out the serial port
-    // Serial.println(windSentence);
-    Udp.beginPacketMulticast(broadcastAddress, NMEAport, WiFi.localIP());
-    Udp.write(windSentence, str.length());
-    Udp.endPacket();
-}
+    str.println(cs, HEX);
 
-void loop()
-{
-    int i;
-    const unsigned int LOOP_DELAY = 50;
-    const unsigned int LOOP_TIME = TIMEOUT / LOOP_DELAY;
-
-    digitalWrite(LED, !digitalRead(LED)); // Toggle LED
-
-    i = 0;
-    // If there is new data, process it, otherwise wait for LOOP_TIME to pass
-    while ((newData != true) && (i < LOOP_TIME))
-    {
-        i++;
-        delayMicroseconds(LOOP_DELAY);
+    noInterrupts();
+    if(Serial.availableForWrite()) {
+        Serial.print(windSentence);
     }
-
-    calcWindSpeedAndDir(); // Process new data
-    newData = false;
+    if (connected) {
+        udpSender.beginPacket(destinationAddress, NMEAport);
+        udpSender.print(windSentence);
+        udpSender.endPacket();
+    }
+    interrupts();
 }
