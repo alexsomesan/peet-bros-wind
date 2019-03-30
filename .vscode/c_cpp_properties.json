@@ -1,24 +1,20 @@
 {
     "configurations": [
         {
-            "name": "Win32",
+            "name": "XtensaGCC",
             "includePath": [
-                "C:\\Users\\alex-work\\AppData\\Local\\Arduino15\\packages\\esp8266\\tools\\**",
-                "C:\\Users\\alex-work\\AppData\\Local\\Arduino15\\packages\\esp8266\\hardware\\esp8266\\2.5.0-beta2\\**"
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/build/include/**",
+                "/home/alex/esp/esp-idf/**",
+                "/home/alex/esp/xtensa-esp32-elf/xtensa-esp32-elf/include"
             ],
-            "forcedInclude": [],
-            "intelliSenseMode": "msvc-x64",
-            "compilerPath": "C:/Program Files (x86)/Microsoft Visual Studio 14.0/VC/bin/cl.exe",
+            "defines": [],
+            "compilerPath": "/home/alex/esp/xtensa-esp32-elf/bin/xtensa-esp32-elf-gcc",
             "cStandard": "c11",
-            "cppStandard": "c++17"
-        },
-        {
-            "name": "Mac",
-            "includePath": [
-                "/Users/alex/Library/Arduino15/packages/esp8266/tools/**",
-                "/Users/alex/Library/Arduino15/packages/esp8266/hardware/esp8266/2.5.0-beta2/**"
-            ],
-            "forcedInclude": []
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-x64",
+            "configurationProvider": "vector-of-bool.cmake-tools",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json"
         }
     ],
     "version": 4

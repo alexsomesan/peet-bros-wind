@@ -1,9 +1,10 @@
 {
     "files.associations": {
-        "*.gcode": "gcode",
-        "initializer_list": "cpp",
-        "vector": "cpp",
-        "xstring": "cpp",
-        "xutility": "cpp"
+        "windvane_espnow.h": "c",
+        "stdio.h": "c",
+        "esp_timer.h": "c",
+        "task.h": "c",
+        "freertos.h": "c",
+        "esp_system.h": "c"
     }
 }
