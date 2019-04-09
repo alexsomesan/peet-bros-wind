@@ -25,9 +25,6 @@
   SOFTWARE.
 */
 
-#define windSpeedPin 2
-#define windDirPin 3
-
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -38,25 +35,11 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/gpio.h"
 
 #include "peetbros.h"
 
-
-// mocks
-void interrupts() {}
-void noInterrupts() {}
-#define println(s) { \
-    printf("%s\n", s); \
-}
-
-#define micros() (esp_timer_get_time())
-#define millis() (esp_timer_get_time() / 1000)
-
-#define LOW  0
-#define HIGH 1
-
-// Pin 13 has an LED connected on most Arduino boards.
-int LED = 13;
+#define println(s) printf("%s\n", s);
 
 const uint64_t DEBOUNCE = 10000ul;      // Minimum switch time in microseconds
 const uint64_t DIRECTION_OFFSET = 0ul;  // Manual direction offset in degrees, if required
@@ -89,19 +72,36 @@ volatile int knotsOut = 0;    // Wind speed output in knots * 100
 volatile int dirOut = 0;      // Direction output in degrees
 volatile bool ignoreNextReading = false;
 
-bool debug = false;
+bool debug = true;
 
-void setup()
+#define INT_MASK_SPD 1
+#define INT_MASK_DIR 2
+volatile unsigned int speedTrigger = 0;
+ 
+void readWindSpeed(void* data)
 {
-    // pinMode(LED, OUTPUT);
+    // Despite the interrupt being set to FALLING edge, double check the pin is now LOW
+    if (((esp_timer_get_time() - speedPulse) > DEBOUNCE) && (gpio_get_level(windSpeedPin) == LOW))
+    {
+        // Work out time difference between last pulse and now
+        speedTime = esp_timer_get_time() - speedPulse;
 
-    // pinMode(windSpeedPin, INPUT);
-    // attachInterrupt(windSpeedINT, readWindSpeed, FALLING);
+        // Direction pulse should have occured after the last speed pulse
+        if (dirPulse >= speedPulse) directionTime = dirPulse - speedPulse;
 
-    // pinMode(windDirPin, INPUT);
-    // attachInterrupt(windDirINT, readWindDir, FALLING);
+        newData = true;
+        speedPulse = esp_timer_get_time();    // Capture time of the new speed pulse
+    }
+    speedTrigger |= INT_MASK_SPD;
+}
 
-    // interrupts();
+void readWindDir(void* data)
+{
+    if (((esp_timer_get_time() - dirPulse) > DEBOUNCE) && (gpio_get_level(windDirPin) == LOW))
+    {
+      dirPulse = esp_timer_get_time();        // Capture time of direction pulse
+    }
+    speedTrigger |= INT_MASK_DIR;
 }
 
 uint8_t getChecksum(char* str, size_t len)
@@ -153,30 +153,6 @@ void printWindNmea()
     memset(windSentence, 0, strlen(windSentence));
 }
 
-
-void readWindSpeed()
-{
-    // Despite the interrupt being set to FALLING edge, double check the pin is now LOW
-    if (((micros() - speedPulse) > DEBOUNCE) && (digitalRead(windSpeedPin) == LOW))
-    {
-        // Work out time difference between last pulse and now
-        speedTime = micros() - speedPulse;
-
-        // Direction pulse should have occured after the last speed pulse
-        if (dirPulse >= speedPulse) directionTime = dirPulse - speedPulse;
-
-        newData = true;
-        speedPulse = micros();    // Capture time of the new speed pulse
-    }
-}
-
-void readWindDir()
-{
-    if (((micros() - dirPulse) > DEBOUNCE) && (digitalRead(windDirPin) == LOW))
-    {
-      dirPulse = micros();        // Capture time of direction pulse
-    }
-}
 
 bool checkDirDev(int64_t knots, int dev)
 {
@@ -233,7 +209,7 @@ void calcWindSpeedAndDir()
     interrupts();
 
     // Make speed zero, if the pulse delay is too int64_t
-    if (micros() - speedPulse_ > TIMEOUT) speedTime_ = 0ul;
+    if (esp_timer_get_time() - speedPulse_ > TIMEOUT) speedTime_ = 0ul;
 
     // The following converts revolutions per 100 seconds (rps) to knots x 100
     // This calculation follows the Peet Bros. piecemeal calibration data
@@ -311,7 +287,7 @@ void calcWindSpeedAndDir()
 
     if (debug)
     {
-        printf("%lld", millis());
+        printf("%lld", (esp_timer_get_time() / 1000));
         printf(",");
         printf("%d", dirOut);
         printf(",");
@@ -325,12 +301,22 @@ void calcWindSpeedAndDir()
     }
     else
     {
-      if (millis() - lastUpdate > UPDATE_RATE)
+      if ((esp_timer_get_time() / 1000) - lastUpdate > UPDATE_RATE)
       {
         printWindNmea();
-        lastUpdate = millis();
+        lastUpdate = (esp_timer_get_time() / 1000);
       }
     }
+}
+
+void debugInterrupt(void) {
+  if (speedTrigger & INT_MASK_SPD) {
+    printf("[INT] WIND\n");
+  }
+  if (speedTrigger & INT_MASK_DIR) {
+    printf("[INT] DIR\n");
+  }
+  speedTrigger = 0;
 }
 
 void loop(void *pvParameters)
@@ -352,6 +338,8 @@ void loop(void *pvParameters)
 
         calcWindSpeedAndDir();    // Process new data
         newData = false;
+        debugInterrupt();
+
         vTaskDelay(1);
     }
     vTaskDelete(NULL);
