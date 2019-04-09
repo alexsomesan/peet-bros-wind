@@ -72,7 +72,7 @@ volatile int knotsOut = 0;    // Wind speed output in knots * 100
 volatile int dirOut = 0;      // Direction output in degrees
 volatile bool ignoreNextReading = false;
 
-bool debug = true;
+bool debug = false;
 
 #define INT_MASK_SPD 1
 #define INT_MASK_DIR 2
@@ -310,6 +310,7 @@ void calcWindSpeedAndDir()
 }
 
 void debugInterrupt(void) {
+  if (!debug) return;
   if (speedTrigger & INT_MASK_SPD) {
     printf("[INT] WIND\n");
   }

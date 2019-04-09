@@ -1,6 +1,6 @@
 #define VERSION "Wind v3 18-Sep-2015"
 
-#define windSpeedPin 3
+#define windSpeedPin 4
 #define windDirPin 2
 
 #define LOW  0
