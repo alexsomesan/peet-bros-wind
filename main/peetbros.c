@@ -36,6 +36,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
+#include "esp_now.h"
 
 #include "peetbros.h"
 
@@ -134,25 +135,23 @@ uint8_t getChecksum(char* str, size_t len)
  */
 void printWindNmea()
 {
-    char windSentence [80];
     float spd = knotsOut / 100.0;
     uint8_t cs;
     size_t len;
 
     //Assemble a sentence of the various parts so that we can calculate the proper checksum
+    memset(windSentence, 0, maxDataFrameSize);
     sprintf(windSentence, "$WIMWV,%d.0,R,%.1f,N,A*", dirOut, spd);
-
     //calculate the checksum
     len = strlen(windSentence);
     cs = getChecksum(windSentence, len);
 
-    sprintf(windSentence + len,"%0X\n", cs); // Assemble the final message and send it out the serial port
+    sprintf(windSentence + len,"%0X\r\n", cs); // Assemble the final message and send it out the serial port
     
     // output to console
-    printf(windSentence);
-    memset(windSentence, 0, strlen(windSentence));
+    esp_now_send(slave.peer_addr, (uint8_t *)windSentence, strlen(windSentence)+2);
+    // printf(windSentence);
 }
-
 
 bool checkDirDev(int64_t knots, int dev)
 {
@@ -340,8 +339,7 @@ void loop(void *pvParameters)
         calcWindSpeedAndDir();    // Process new data
         newData = false;
         debugInterrupt();
-
-        vTaskDelay(1);
+        vTaskDelay(10);
     }
     vTaskDelete(NULL);
 }

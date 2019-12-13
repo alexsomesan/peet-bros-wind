@@ -9,7 +9,11 @@
 #define ESP_INTR_FLAG_DEFAULT 0
 
 // Pin 13 has an LED connected on most Arduino boards.
-#define LED = 13;
+#define LED 13
+
+#define maxDataFrameSize 80
+extern char windSentence[maxDataFrameSize];
+extern esp_now_peer_info_t slave;
 
 extern const float filterGain;
 
